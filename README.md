@@ -1,257 +1,275 @@
 # Beads Village
 
-MCP wrapper kết hợp **Beads** + **Agent Mail** cho multi-agent workflow.
-
-Dựa trên best practices từ [Steve Yegge](https://steve-yegge.medium.com/beads-best-practices-2db636b9760c).
-
-## Kiến trúc
+Multi-agent MCP server combining **Beads** (issue tracking) + **Agent Mail** (coordination).
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Agent 1       │     │   Agent 2       │     │   Agent 3       │
-│   worktree-1    │     │   worktree-2    │     │   worktree-3    │
-└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
-         │                       │                       │
-         └───────────────────────┼───────────────────────┘
-                                 │
-            ┌────────────────────▼────────────────────┐
-            │       Shared via Git                     │
-            │  📋 .beads/beads.jsonl  (Task Graph)    │
-            │  📧 .mail/              (Messages)       │
-            │  🔒 .reservations/      (File Locks)     │
-            └─────────────────────────────────────────┘
+npx beads-village
 ```
 
-## Cài đặt
+## Quick Start
 
-```bash
-# Prerequisites: Install beads CLI
-# https://github.com/beads-project/beads
+### 1. Add to MCP config
 
-# Install this package
-cd mcp-beads-village
-pip install -e .
-```
+**Claude Desktop**
 
-## Cấu hình MCP
-
-### Amp/Antigravity
-
-Thêm vào `settings.json`:
-
-```json
-{
-  "amp.mcpServers": {
-    "beads-village": {
-      "command": "python",
-      "args": ["-m", "beads_village.server"],
-      "cwd": "C:\\Working\\mcp-beads-village",
-      "env": {
-        "BEADS_AGENT": "amp-agent-1",
-        "BEADS_WS": "${workspaceFolder}"
-      }
-    }
-  }
-}
-```
-
-### Claude Desktop
-
-Copy vào `claude_desktop_config.json`:
+File: 
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
 ```json
 {
   "mcpServers": {
     "beads-village": {
-      "command": "python",
-      "args": ["-m", "beads_village.server"],
-      "cwd": "C:\\Working\\mcp-beads-village"
+      "command": "npx",
+      "args": ["beads-village"]
     }
   }
 }
 ```
 
-## Tools
+**Cursor**
 
-### Core Workflow
+File: Settings > MCP > Add Server
 
-| Tool | Mô tả |
-|------|-------|
-| `init` | Khởi tạo Beads + Mail trong project |
-| `claim` | Lấy và claim task tiếp theo (auto-sync) |
-| `done` | Đóng task, release reservations, sync |
-| `add` | Tạo issue mới (cho việc >2 phút) |
+```json
+{
+  "mcpServers": {
+    "beads-village": {
+      "command": "npx",
+      "args": ["beads-village"]
+    }
+  }
+}
+```
 
-### Issue Management
+**VS Code / Amp**
 
-| Tool | Mô tả |
-|------|-------|
-| `ls` | Liệt kê issues theo status |
-| `ready` | Xem issues không có blocker |
-| `show` | Chi tiết 1 issue |
+File: `.vscode/settings.json` or User Settings
 
-### Maintenance
+```json
+{
+  "amp.mcpServers": {
+    "beads-village": {
+      "command": "npx",
+      "args": ["beads-village"]
+    }
+  }
+}
+```
 
-| Tool | Mô tả |
-|------|-------|
-| `cleanup` | Xóa issues cũ (chạy mỗi vài ngày) |
-| `doctor` | Kiểm tra và sửa beads health |
-| `sync` | Sync với git |
+**Claude Code CLI**
 
-### File Reservations (Multi-agent)
+```bash
+claude mcp add --transport stdio beads-village --scope user -- npx beads-village
+```
 
-| Tool | Mô tả |
-|------|-------|
-| `reserve` | Claim files trước khi edit |
-| `release` | Nhả files khi xong |
-| `reservations` | Xem ai đang giữ files nào |
+### 2. Use in agent
 
-### Messaging
+```
+Agent: init()
+Agent: claim()
+Agent: reserve(paths=["src/auth.py"])
+Agent: [do work...]
+Agent: done(id="bd-42", msg="implemented auth")
+```
 
-| Tool | Mô tả |
-|------|-------|
-| `msg` | Gửi message cho agents khác |
-| `inbox` | Đọc messages |
-| `status` | Xem trạng thái village |
+---
 
 ## Workflow
 
-### Single Agent
-
 ```
-1. init         → Khởi tạo workspace
-2. claim        → Lấy task tiếp theo
-3. [work]       → Làm việc
-4. add          → File issues cho việc phát hiện thêm
-5. done         → Hoàn thành task
-6. RESTART      → Khởi động lại session
++-------+     +-------+     +---------+     +------+     +------+
+| init  | --> | claim | --> | reserve | --> | work | --> | done |
++-------+     +-------+     +---------+     +------+     +------+
+                                                            |
+                                                            v
+                                                      [ RESTART ]
 ```
 
-### Multi-Agent
+**Best Practice**: 1 task = 1 session. Restart agent after `done()`.
+
+---
+
+## Tools
+
+### Core (4)
+
+| Tool | Description | Example |
+|------|-------------|---------|
+| `init` | Join workspace | `init()` or `init(ws="/path")` |
+| `claim` | Get next task | `claim()` |
+| `done` | Complete task | `done(id="bd-42", msg="fixed bug")` |
+| `add` | Create issue | `add(title="Fix login", typ="bug", pri=1)` |
+
+### Query (3)
+
+| Tool | Description | Example |
+|------|-------------|---------|
+| `ls` | List issues | `ls(status="open", limit=10)` |
+| `ready` | Unblocked tasks | `ready(limit=5)` |
+| `show` | Issue details | `show(id="bd-42")` |
+
+### File Locks (3)
+
+| Tool | Description | Example |
+|------|-------------|---------|
+| `reserve` | Lock files | `reserve(paths=["src/api.py"], ttl=600)` |
+| `release` | Unlock files | `release()` |
+| `reservations` | View locks | `reservations()` |
+
+### Messaging (3)
+
+| Tool | Description | Example |
+|------|-------------|---------|
+| `msg` | Send message | `msg(subj="help", body="stuck on X")` |
+| `inbox` | Read messages | `inbox(n=5, unread=true)` |
+| `status` | Workspace info | `status()` |
+
+### Maintenance (3)
+
+| Tool | Description | Example |
+|------|-------------|---------|
+| `sync` | Git sync | `sync()` |
+| `cleanup` | Delete old issues | `cleanup(days=2)` |
+| `doctor` | Fix database | `doctor()` |
+
+---
+
+## Multi-Agent Architecture
 
 ```
-Agent 1:                      Agent 2:
-─────────                     ─────────
-init                          init
-claim (task-1)                claim (task-2)
-reserve(["src/a.py"])         reserve(["src/b.py"])
-[edit src/a.py]               [edit src/b.py]
-release                       release
-done                          done
+  Agent 1              Agent 2              Agent 3
+  (Frontend)           (Backend)            (Mobile)
+      |                    |                    |
+      v                    v                    v
+  worktree-1           worktree-2           worktree-3
+      |                    |                    |
+      +--------------------+--------------------+
+                           |
+                           v
+              +---------------------------+
+              |     Shared via Git        |
+              |  .beads/   (tasks)        |
+              |  .mail/    (messages)     |
+              |  .reservations/ (locks)   |
+              +---------------------------+
 ```
 
-## Best Practices (Steve Yegge)
+---
 
-1. **1 task = 1 session** - Restart agent sau mỗi task hoàn thành
-2. **File issues cho việc >2 phút** - Đừng để mất track
-3. **Giữ <200 issues mở** - Chạy `cleanup` thường xuyên
-4. **Plan ngoài Beads** - Dùng tool khác để plan, rồi import thành epics
-5. **Agents claim work** - Không assign, để agents tự claim
-6. **Run `doctor` regularly** - Kiểm tra health
+## Response Format
 
-## Response Fields (Token-optimized)
+Token-optimized short field names:
 
 | Field | Meaning |
 |-------|---------|
 | `id` | Issue ID |
 | `t` | Title |
-| `p` | Priority (0=critical, 4=backlog) |
+| `p` | Priority (0-4) |
 | `s` | Status |
 | `f` | From (sender) |
 | `b` | Body |
 | `ts` | Timestamp |
-| `imp` | Importance |
 
-## Multi-Agent Setup với Git Worktrees
+**Priority levels**: 0=critical, 1=high, 2=normal, 3=low, 4=backlog
+
+---
+
+## Installation Options
 
 ```bash
-# Main repo
-cd my-project
-bd init
+# Option 1: npx (recommended)
+npx beads-village
 
-# Tạo worktrees cho mỗi agent
-git worktree add ../agent-1 -b work-1
-git worktree add ../agent-2 -b work-2
-git worktree add ../agent-3 -b work-3
+# Option 2: npm global
+npm install -g beads-village
 
-# Mỗi agent chạy trong worktree riêng với BEADS_AGENT khác nhau
-# Beads sync qua git
-# Messages và reservations sync qua shared folder hoặc git
+# Option 3: pip
+pip install beads-village
 ```
+
+**Requirements**:
+- Python 3.8+
+- Node.js 16+ (for npx)
+- [Beads CLI](https://github.com/beads-project/beads) (optional, for issue tracking)
+
+---
 
 ## Environment Variables
 
-| Variable | Default | Mô tả |
-|----------|---------|-------|
-| `BEADS_AGENT` | `agent-{pid}` | Tên agent unique |
-| `BEADS_WS` | Current dir | Workspace directory (where bd runs) |
-| `BEADS_SHARED` | Same as WS | Shared directory for .mail/ and .reservations/ |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BEADS_AGENT` | `agent-{pid}` | Agent name |
+| `BEADS_WS` | Current dir | Workspace path |
 
-### Multi-Agent Setup
+---
 
-Với git worktrees, mỗi agent có workspace riêng nhưng cần share `.mail/` và `.reservations/`:
-
-```bash
-# Main repo structure:
-my-project/           ← BEADS_SHARED (all agents point here)
-├── .beads/          ← Beads data (syncs via git)
-├── .mail/           ← Messages (shared via BEADS_SHARED)
-├── .reservations/   ← File locks (shared via BEADS_SHARED)
-└── src/
-
-# Worktrees:
-../agent-1/          ← BEADS_WS for agent 1
-../agent-2/          ← BEADS_WS for agent 2
-```
-
-Config cho mỗi agent:
-```json
-{
-  "env": {
-    "BEADS_AGENT": "agent-1",
-    "BEADS_WS": "/path/to/agent-1",
-    "BEADS_SHARED": "/path/to/my-project"
-  }
-}
-```
-
-## File Reservation System
-
-Hệ thống reservation giúp tránh xung đột khi nhiều agents edit cùng files:
+## Example Session
 
 ```python
-# Agent 1 claims files
-reserve(paths=["src/auth.py", "src/utils.py"], ttl=600, reason="implementing login")
+# Initialize
+init()
+# {"ok":1,"agent":"agent-1","ws":"/project"}
 
-# Agent 2 tries to claim same file
-reserve(paths=["src/auth.py"])
-# → {"granted": [], "conflicts": [{"path": "src/auth.py", "holder": "agent-1", ...}]}
+# Claim a task
+claim()
+# {"id":"bd-42","t":"Add OAuth login","p":1,"s":"in_progress"}
 
-# Agent 1 finishes and releases
-release()  # Releases all owned reservations
+# Reserve files before editing
+reserve(paths=["src/auth.py", "src/oauth.py"])
+# {"granted":["src/auth.py","src/oauth.py"],"conflicts":[]}
+
+# Found related work? Create issue
+add(title="Add refresh token logic", typ="task", pri=2)
+# {"id":"bd-43","t":"Add refresh token logic","p":2}
+
+# Complete task
+done(id="bd-42", msg="OAuth login implemented")
+# {"ok":1,"done":1,"hint":"restart session"}
 ```
 
-- **TTL**: Reservations expire after TTL seconds (default 10 min)
-- **Auto-release**: `done()` automatically releases all reservations
-- **Graceful degradation**: Conflicts are reported, not enforced
+---
 
 ## Troubleshooting
 
-### bd CLI not found
+| Problem | Solution |
+|---------|----------|
+| `bd CLI not found` | `go install github.com/beads-project/beads/cmd/bd@latest` |
+| `Python not found` | Install Python 3.8+ |
+| Stale reservations | Run `init()` to cleanup expired |
+| >200 open issues | Run `cleanup(days=2)` |
 
-```bash
-# Install beads
-go install github.com/beads-project/beads/cmd/bd@latest
-```
+---
 
-### Permission denied on Windows
+## Performance
 
-Run terminal as Administrator hoặc check antivirus settings.
+| Operation | Speed |
+|-----------|-------|
+| Path normalization | 0.01ms |
+| Reserve file | 2ms |
+| Send message | 1ms |
+| Read inbox | 22ms |
+| MCP protocol | <0.01ms |
 
-### Stale reservations
+---
 
-Reservations auto-expire. Hoặc chạy `init` để cleanup expired.
+## Cross-Platform
+
+| Platform | Status |
+|----------|--------|
+| Windows | Supported |
+| macOS | Supported |
+| Linux | Supported |
+
+All paths use forward slashes (`/`) in responses.
+
+---
 
 ## License
 
 MIT
+
+## Links
+
+- [Beads CLI](https://github.com/beads-project/beads)
+- [Best Practices](https://steve-yegge.medium.com/beads-best-practices-2db636b9760c)

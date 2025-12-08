@@ -1,0 +1,36 @@
+{
+  "name": "beads-village",
+  "version": "1.0.1",
+  "description": "MCP server for multi-agent workflow with Beads + Agent Mail",
+  "keywords": [
+    "mcp",
+    "beads",
+    "agent",
+    "ai",
+    "workflow",
+    "issue-tracker",
+    "multi-agent"
+  ],
+  "author": "LNS2905",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LNS2905/mcp-beads-village.git"
+  },
+  "bin": {
+    "beads-village": "bin/beads-village.js"
+  },
+  "files": [
+    "bin/",
+    "beads_village/*.py",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ]
+}
