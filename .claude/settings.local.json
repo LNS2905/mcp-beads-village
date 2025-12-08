@@ -14,7 +14,9 @@
       "Bash(git -C /c/Working rev-parse --git-dir)",
       "Bash(git config:*)",
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(gh repo create:*)"
     ],
     "deny": [],
     "ask": []

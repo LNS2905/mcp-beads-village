@@ -162,9 +162,9 @@ init(ws="/absolute/path/to/codebase")
 **IMPORTANT**: After creating, report the workspace path to user:
 
 ```
-✅ Beads workspace created!
-📁 Workspace: C:\Projects\my-app-be
-🤖 Agent: agent-be-1
+Beads workspace created!
+Workspace: C:\Projects\my-app-be
+Agent: agent-be-1
 
 To assign another agent to this workspace, use:
 init(ws="C:\Projects\my-app-be")
@@ -193,7 +193,7 @@ User: "Create a beads workspace for this BE project"
 Agent: 
   → init()
   → Response: {"ok":1,"agent":"agent-be","ws":"C:\\Projects\\my-app-be"}
-  → "✅ Workspace created at: C:\Projects\my-app-be"
+  → "Workspace created at: C:\Projects\my-app-be"
 
 User: "Create tasks for auth APIs"
 Agent:
@@ -211,7 +211,7 @@ Agent:
 User: "Now create FE workspace and add tasks based on BE APIs"
 Agent:
   → init(ws="C:\\Projects\\my-app-fe")
-  → "✅ Workspace created at: C:\Projects\my-app-fe"
+  → "Workspace created at: C:\Projects\my-app-fe"
   → add(title="Login form (uses /auth/login)", typ="feature", pri=1)
   → add(title="Register form (uses /auth/register)", typ="feature", pri=1)
 ```

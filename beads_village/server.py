@@ -832,24 +832,24 @@ async def handle_request(req: dict) -> Optional[dict]:
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {}},
                 "serverInfo": {"name": "beads-village", "version": "2.0"},
-                "instructions": """Beads Village - Multi-agent workflow with Beads + Agent Mail.
+                "instructions": """Beads Village MCP - Issue tracking for AI agents.
 
-Workflow: init -> claim -> [work] -> done (then restart session)
+WORKFLOW: init -> claim -> reserve -> [work] -> add -> done -> RESTART
 
-Task Management:
-- claim: Get next ready task (auto-syncs first)
-- add: File issues for work >2 min (links to current task)
-- done: Complete task (releases reservations, syncs)
+WORKSPACE:
+  init()                    # Create in current dir
+  init(ws="/path/to/repo")  # Join specific workspace
+  REPORT ws path after init so other agents can join
 
-File Reservations (multi-agent):
-- reserve: Claim files before editing
-- release: Release when done
-- reservations: See who has what
+TOOLS:
+  claim         Get next ready task
+  add(title)    Create issue (for work >2min)
+  done(id,msg)  Complete task
+  ls/ready      List issues
+  reserve/release  File locks (multi-agent)
+  cleanup/doctor   Maintenance
 
-Best Practices:
-- 1 task per session, restart after done()
-- Keep <200 open issues (use cleanup)
-- Run doctor regularly"""
+MULTI-REPO: Each codebase = separate workspace. Switch with init(ws="...")"""
             }
         }
     
