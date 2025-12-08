@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where:*)",
+      "Skill(example-skills:mcp-builder)",
+      "Bash(python:*)",
+      "Bash(timeout 10 python:*)",
+      "Bash(powershell:*)",
+      "Bash(bd list:*)",
+      "mcp__beads-village__init",
+      "mcp__beads-village__ready",
+      "Bash(bd --help:*)",
+      "mcp__beads-village__add",
+      "Bash(git -C /c/Working rev-parse --git-dir)",
+      "Bash(git config:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "beads-village"
+  ]
+}

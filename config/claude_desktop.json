@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "beads-village": {
+      "command": "beads-village",
+      "env": {
+        "BEADS_AGENT_NAME": "claude-main",
+        "BEADS_WORKING_DIR": "/path/to/your/project"
+      }
+    }
+  }
+}

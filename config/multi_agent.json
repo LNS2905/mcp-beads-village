@@ -1,0 +1,35 @@
+{
+  "_comment": "Config for running multiple agents in an Agent Village",
+  "mcpServers": {
+    "beads-village-1": {
+      "command": "beads-village",
+      "env": {
+        "BEADS_AGENT_NAME": "worker-1",
+        "BEADS_WORKING_DIR": "/project/worktree-1"
+      }
+    },
+    "beads-village-2": {
+      "command": "beads-village",
+      "env": {
+        "BEADS_AGENT_NAME": "worker-2",
+        "BEADS_WORKING_DIR": "/project/worktree-2"
+      }
+    },
+    "beads-village-3": {
+      "command": "beads-village",
+      "env": {
+        "BEADS_AGENT_NAME": "worker-3",
+        "BEADS_WORKING_DIR": "/project/worktree-3"
+      }
+    }
+  },
+  "_setup": [
+    "# Setup git worktrees for each agent:",
+    "git worktree add ../worktree-1 -b agent-1",
+    "git worktree add ../worktree-2 -b agent-2", 
+    "git worktree add ../worktree-3 -b agent-3",
+    "",
+    "# Init beads in main repo (shared database):",
+    "cd /project && bd init"
+  ]
+}

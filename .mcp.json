@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "beads-village": {
+      "command": "python",
+      "args": ["-m", "beads_village.server"],
+      "cwd": "C:\\Working\\mcp-beads-village",
+      "env": {
+        "BEADS_AGENT": "claude-code",
+        "BEADS_WS": "C:\\Working\\Code\\ProxyAPI\\CLIPROXYAPI"
+      }
+    }
+  }
+}

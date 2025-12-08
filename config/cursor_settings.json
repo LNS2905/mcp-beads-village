@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "beads-village": {
+      "command": "python",
+      "args": ["-m", "beads_village.server"],
+      "env": {
+        "BEADS_AGENT_NAME": "cursor-agent",
+        "BEADS_WORKING_DIR": "${workspaceFolder}"
+      }
+    }
+  }
+}
