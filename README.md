@@ -330,7 +330,7 @@ Falls back to CLI automatically if daemon is not running.
 
 ## Changelog
 
-### v1.1.0 (Token Optimization)
+### v1.1.1 (Token Optimization)
 
 - **Tool descriptions reduced by ~50%** - Compact, LLM-friendly descriptions
 - **Instructions reduced by ~80%** - Essential workflow only in MCP initialize

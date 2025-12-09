@@ -20,7 +20,13 @@ from datetime import datetime, timedelta
 from typing import Optional, Set, List, Any
 
 # Daemon client for faster operations (optional)
-from .bd_daemon_client import BdDaemonClient, is_daemon_available, DaemonError, DaemonNotRunningError
+try:
+    from .bd_daemon_client import BdDaemonClient, is_daemon_available, DaemonError, DaemonNotRunningError
+except ImportError:
+    # Running as standalone script (not as package)
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from bd_daemon_client import BdDaemonClient, is_daemon_available, DaemonError, DaemonNotRunningError
 
 # ============================================================================
 # CONFIG
