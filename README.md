@@ -11,6 +11,28 @@ Combines [Beads](https://github.com/steveyegge/beads) (issue tracking) + Agent M
 - **File conflict prevention**: Lock files before editing to prevent merge conflicts
 - **Cross-agent communication**: Send messages between agents for coordination
 
+## Prerequisites
+
+### Required: Install Beads CLI
+
+Beads Village requires the **Beads CLI** (`bd`) to be installed on your machine:
+
+```bash
+# Install via pip
+pip install beads
+
+# Verify installation
+bd --version
+```
+
+> ⚠️ **Important**: Without Beads CLI installed, the MCP server will not function properly.
+
+### System Requirements
+
+- **Python**: 3.8+
+- **Node.js**: 16+ (for npx)
+- **Git**: For syncing between agents
+
 ## Installation
 
 ```bash
@@ -24,13 +46,14 @@ npm install -g beads-village
 pip install beads-village
 ```
 
-**Requirements**: Python 3.8+, Node.js 16+ (for npx)
-
 ## Configuration
 
 ### Claude Desktop
 
-`%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
+**Config file location:**
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Linux**: `~/.config/Claude/claude_desktop_config.json`
 
 ```json
 {
@@ -43,9 +66,122 @@ pip install beads-village
 }
 ```
 
-### VS Code / Amp
+### Claude Code (CLI)
 
-`.vscode/settings.json`
+Add MCP server using the Claude CLI command:
+
+```bash
+# Add for current project only
+claude mcp add beads-village --scope local -- npx beads-village
+
+# Add for all projects (user scope)
+claude mcp add beads-village --scope user -- npx beads-village
+
+# Add as shared project config (.mcp.json)
+claude mcp add beads-village --scope project -- npx beads-village
+```
+
+**Scope options:**
+| Scope | Description |
+|-------|-------------|
+| `local` | Available only to you in the current project (default) |
+| `project` | Shared with everyone in the project via `.mcp.json` file |
+| `user` | Available to you across all projects |
+
+Or manually create `.mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "beads-village": {
+      "command": "npx",
+      "args": ["beads-village"]
+    }
+  }
+}
+```
+
+### Cursor
+
+**Method 1: Via Settings UI**
+
+1. Open Cursor Settings (`Ctrl+,` / `Cmd+,`)
+2. Search for "MCP"
+3. Navigate to **Features > MCP Servers**
+4. Click **Add Server**
+5. Configure:
+   - **Name**: `beads-village`
+   - **Command**: `npx`
+   - **Args**: `beads-village`
+
+**Method 2: Via config file**
+
+Create or edit `.cursor/mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "beads-village": {
+      "command": "npx",
+      "args": ["beads-village"]
+    }
+  }
+}
+```
+
+Or for global configuration, edit `~/.cursor/mcp.json` (create if not exists).
+
+### GitHub Copilot (VS Code)
+
+GitHub Copilot supports MCP servers via VS Code settings.
+
+**Method 1: Via settings.json**
+
+Add to your VS Code `settings.json` (`Ctrl+,` → Open Settings JSON):
+
+```json
+{
+  "github.copilot.chat.mcp.servers": {
+    "beads-village": {
+      "command": "npx",
+      "args": ["beads-village"]
+    }
+  }
+}
+```
+
+**Method 2: Via workspace config**
+
+Create `.vscode/mcp.json` in your project:
+
+```json
+{
+  "servers": {
+    "beads-village": {
+      "command": "npx",
+      "args": ["beads-village"]
+    }
+  }
+}
+```
+
+> ⚠️ **Note**: MCP support in GitHub Copilot requires VS Code and may require the "MCP servers in Copilot" policy to be enabled by your organization admin.
+
+### Amp Code
+
+**Method 1: Via CLI (recommended)**
+
+```bash
+# Add to current workspace
+amp mcp add --workspace beads-village -- npx beads-village
+
+# Add globally (user settings)
+amp mcp add beads-village -- npx beads-village
+```
+
+**Method 2: Via workspace settings**
+
+Create `.amp/settings.json` in your project root:
 
 ```json
 {
@@ -58,9 +194,79 @@ pip install beads-village
 }
 ```
 
-### Cursor
+**Method 3: Via VS Code settings**
 
-Settings > MCP > Add Server with same config as above.
+Add to `.vscode/settings.json`:
+
+```json
+{
+  "amp.mcpServers": {
+    "beads-village": {
+      "command": "npx",
+      "args": ["beads-village"]
+    }
+  }
+}
+```
+
+### Kilo Code
+
+Kilo Code supports MCP servers via its settings in VS Code.
+
+**Method 1: Via Kilo Code Settings UI**
+
+1. Open VS Code Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
+2. Search for "Kilo Code: Open Settings"
+3. Navigate to **MCP Servers** section
+4. Click **Add Server**
+5. Configure:
+   - **Name**: `beads-village`
+   - **Type**: `stdio`
+   - **Command**: `npx`
+   - **Args**: `["beads-village"]`
+
+**Method 2: Via settings.json**
+
+Add to your VS Code `settings.json`:
+
+```json
+{
+  "kilocode.mcpServers": {
+    "beads-village": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["beads-village"]
+    }
+  }
+}
+```
+
+### Windsurf
+
+Add to your Windsurf MCP configuration (`~/.windsurf/mcp.json` or project-level):
+
+```json
+{
+  "mcpServers": {
+    "beads-village": {
+      "command": "npx",
+      "args": ["beads-village"]
+    }
+  }
+}
+```
+
+### Configuration Summary
+
+| Client | Config Location | Config Key |
+|--------|-----------------|------------|
+| Claude Desktop | `claude_desktop_config.json` | `mcpServers` |
+| Claude Code | `.mcp.json` or CLI | `mcpServers` |
+| Cursor | `.cursor/mcp.json` | `mcpServers` |
+| GitHub Copilot | `settings.json` or `.vscode/mcp.json` | `github.copilot.chat.mcp.servers` |
+| Amp Code | `.amp/settings.json` or `.vscode/settings.json` | `amp.mcpServers` |
+| Kilo Code | VS Code `settings.json` | `kilocode.mcpServers` |
+| Windsurf | `~/.windsurf/mcp.json` | `mcpServers` |
 
 ## How It Works
 
@@ -320,6 +526,30 @@ Falls back to CLI automatically if daemon is not running.
 |----------|---------|
 | Linux/macOS | ✅ Unix socket |
 | Windows | ⚠️ Experimental (requires pywin32) |
+
+## Troubleshooting
+
+### Common Issues
+
+| Issue | Solution |
+|-------|----------|
+| `bd: command not found` | Install Beads CLI: `pip install beads` |
+| MCP server not starting | Check Node.js 16+ is installed |
+| Tools not appearing | Restart your AI client after config changes |
+| Permission errors | Ensure write access to workspace directory |
+
+### Verify Installation
+
+```bash
+# Check Beads CLI
+bd --version
+
+# Check Node.js
+node --version
+
+# Test MCP server
+npx beads-village --help
+```
 
 ## Links
 
