@@ -173,17 +173,40 @@ Choose the right documentation for your AI model:
 | Category | Tools | Description |
 |----------|-------|-------------|
 | **Lifecycle** | `init`, `claim`, `done` | Task workflow |
-| **Issues** | `add`, `assign`, `ls`, `ready`, `show` | Task management |
+| **Issues** | `add`, `assign`, `ls`, `show` | Task management (`ls` supports `status="ready"`) |
 | **Files** | `reserve`, `release`, `reservations` | Conflict prevention |
-| **Messages** | `msg`, `inbox`, `broadcast` | Agent communication |
-| **Status** | `discover`, `status` | Team visibility |
+| **Messages** | `msg`, `inbox` | Agent communication (`msg` with `global=true` for broadcast) |
+| **Status** | `status` | Team visibility (use `include_agents=true` for discovery) |
 | **Maintenance** | `sync`, `cleanup`, `doctor` | Housekeeping |
+| **Graph Analysis** | `bv_insights`, `bv_plan`, `bv_priority`, `bv_diff` | Requires optional `bv` binary |
+| **Dashboard** | `village_tui` | Launch visual TUI dashboard |
 
 ---
 
 ## Beads Viewer Integration (Optional)
 
-Enhance your workflow with the **Textual Dashboard** - a built-in TUI for monitoring agents, tasks, and messages.
+The dashboard works **without `bv`**. Install `bv` only if you need advanced graph analysis.
+
+### Dashboard Features (Built-in, no bv needed)
+
+| Panel | Description |
+|-------|-------------|
+| **Teams** | Click to filter agents by team |
+| **Agents** | Shows online/offline status, current task |
+| **Tasks Board** | Kanban view (Open/In Progress/Blocked/Closed) |
+| **Task Detail** | Click any task for full details + activity |
+| **File Locks** | Active file reservations with TTL |
+| **Messages** | Recent broadcasts and done notifications |
+| **Filter Recipes** | Quick filters: All, Actionable, Blocked, High Impact, Stale |
+
+### Graph Insights (Requires `bv`)
+
+| Feature | Without bv | With bv |
+|---------|------------|---------|
+| Keystones, Bottlenecks | ❌ | ✅ |
+| PageRank, Betweenness | ❌ | ✅ |
+| Cycle Detection | ❌ | ✅ |
+| Parallel Execution Plan | ❌ | ✅ |
 
 ### Launch Dashboard
 
@@ -197,17 +220,6 @@ python -m beads_village.dashboard "C:\path\to\workspace"
 # Auto-start when leader inits
 init(leader=True, start_tui=True)
 ```
-
-### Dashboard Features
-
-| Panel | Description |
-|-------|-------------|
-| **Teams** | Click to filter agents by team |
-| **Agents** | Shows online/offline status, current task |
-| **Tasks Board** | Kanban view (Open/In Progress/Blocked/Closed) |
-| **Task Detail** | Click any task for full details + activity |
-| **File Locks** | Active file reservations with TTL |
-| **Messages** | Recent broadcasts and done notifications |
 
 ### Keyboard Shortcuts
 
@@ -242,8 +254,8 @@ go install github.com/Dicklesworthstone/beads_viewer/cmd/bv@latest
 | `bv_plan` | Parallel execution tracks for multi-agent work |
 | `bv_priority` | Priority recommendations based on graph metrics |
 | `bv_diff` | Compare changes between git revisions |
-| `bv_tui` | Launch interactive TUI dashboard |
-| `bv_status` | Check bv availability and version |
+
+> **Note:** `bv_tui` and `bv_status` have been merged into `village_tui` and `status(include_bv=true)`
 
 ### Usage Examples
 
@@ -254,11 +266,14 @@ bv_insights()
 # Get priority recommendations
 bv_priority(limit=5)
 
-# Launch TUI for human operator
-bv_tui(recipe="actionable")
+# Launch unified TUI dashboard
+village_tui()
 
 # Auto-start TUI when leader inits
 init(leader=True, start_tui=True)
+
+# Check bv availability via status
+status(include_bv=True)
 ```
 
 ### Architecture with bv
@@ -363,6 +378,34 @@ npx beads-village --help
 ---
 
 ## Changelog
+
+<details>
+<summary><strong>v1.3.1</strong> - CLI Flag Fix</summary>
+
+**Bug Fixes:**
+- Fixed `--tag` flag error in `add` tool - now uses correct `--labels` flag for `bd create`
+- Fixed `--tag` flag error in `assign` tool - now uses correct `--add-label` flag for `bd update`
+- Fixed daemon fallback detection for `--labels` and `--add-label` flags
+
+</details>
+
+<details>
+<summary><strong>v1.3.0</strong> - Tool Consolidation & Dashboard Enhancements</summary>
+
+**Tool Consolidation (26 → 21 tools):**
+- `broadcast` merged into `msg(global=true, to="all")`
+- `discover` merged into `status(include_agents=true)`
+- `ready` merged into `ls(status="ready")`
+- `bv_status` merged into `status(include_bv=true)`
+- `bv_tui` merged into `village_tui`
+
+**Dashboard Enhancements:**
+- Added **Graph Insights** panel (Keystones, Influencers, Cycles)
+- Added **Filter Recipes** panel (All, Actionable, Blocked, High Impact, Stale)
+- Dashboard works without `bv` binary (graph insights require bv)
+- Improved scrollbar and alignment
+- Status icons for issues (○ open, ◐ in_progress, ✕ blocked, ✓ closed)
+</details>
 
 <details>
 <summary><strong>v1.2.0</strong> - Textual Dashboard & Optimizations</summary>

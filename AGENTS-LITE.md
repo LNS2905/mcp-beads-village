@@ -17,9 +17,10 @@ init(team, role="fe/be/mobile") → claim() → reserve(paths) → work → done
 ```bash
 python -m beads_village.dashboard [workspace]   # Manual launch
 init(leader=true, start_tui=true)              # Auto-launch for leader
+village_tui()                                  # Launch from MCP
 ```
 
-## Core Tools
+## Core Tools (21 total)
 
 | Tool | Use | Key Args |
 |------|-----|----------|
@@ -33,8 +34,7 @@ init(leader=true, start_tui=true)              # Auto-launch for leader
 
 | Tool | Use |
 |------|-----|
-| `ls` | List issues (status=open/closed/all) |
-| `ready` | Get claimable tasks |
+| `ls` | List issues (status=open/closed/ready/all) |
 | `show` | Get issue details (id) |
 
 ## File Locking
@@ -49,10 +49,14 @@ init(leader=true, start_tui=true)              # Auto-launch for leader
 
 | Tool | Use |
 |------|-----|
-| `msg` | Send message (subj, to, global) |
+| `msg` | Send message (subj, to, global=true for broadcast) |
 | `inbox` | Get messages |
-| `broadcast` | Team-wide announcement |
-| `discover` | Find agents in team |
+
+## Status & Discovery
+
+| Tool | Use |
+|------|-----|
+| `status` | Workspace overview (include_agents=true for discovery, include_bv=true for bv status) |
 
 ## Maintenance
 
@@ -61,10 +65,16 @@ init(leader=true, start_tui=true)              # Auto-launch for leader
 | `sync` | Git sync |
 | `cleanup` | Remove old issues (days) |
 | `doctor` | Fix database |
-| `status` | Workspace overview |
 
-## Optional: bv Tools
-`bv_insights`, `bv_plan`, `bv_priority`, `bv_tui` - Graph analysis (requires bv binary)
+## Dashboard & Graph Tools
+
+| Tool | Use |
+|------|-----|
+| `village_tui` | Launch unified dashboard (works without bv) |
+| `bv_insights` | Graph analysis (requires bv) |
+| `bv_plan` | Parallel execution tracks (requires bv) |
+| `bv_priority` | Priority recommendations (requires bv) |
+| `bv_diff` | Compare git revisions (requires bv) |
 
 ## Response Fields
 
@@ -91,11 +101,21 @@ task, bug, feature, epic, chore
 5. Create issues for work >2min
 6. Restart session after `done()`
 
+## Tool Consolidation (v1.3.0)
+
+| Old Tool | New Usage |
+|----------|-----------|
+| `broadcast` | `msg(subj, body, global=true, to="all")` |
+| `discover` | `status(include_agents=true)` |
+| `ready` | `ls(status="ready")` |
+| `bv_status` | `status(include_bv=true)` |
+| `bv_tui` | `village_tui` |
+
 ## Example: Multi-Agent Setup
 
 ```python
 # Leader creates tasks
-init(team="proj", leader=true)
+init(team="proj", leader=true, start_tui=true)
 add(title="Login API", tags=["be"])
 add(title="Login form", tags=["fe"])
 
@@ -103,7 +123,16 @@ add(title="Login form", tags=["fe"])
 init(team="proj", role="be")
 claim()  # Gets "Login API"
 
-# FE agent claims FE tasks
+# FE agent claims FE tasks  
 init(team="proj", role="fe")
 claim()  # Gets "Login form"
+
+# Team-wide announcement (replaces broadcast)
+msg(subj="API Ready", body="Login endpoint live", global=true, to="all")
+
+# Find teammates (replaces discover)
+status(include_agents=true)
+
+# Get claimable tasks (replaces ready)
+ls(status="ready")
 ```

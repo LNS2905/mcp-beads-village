@@ -318,6 +318,55 @@ class MessagesWidget(ScrollableContainer):
         yield Static("Loading messages...", id="messages-list")
 
 
+class InsightsWidget(ScrollableContainer):
+    """Widget showing graph insights from bv - bottlenecks, keystones, cycles"""
+    can_focus = True
+    
+    def compose(self) -> ComposeResult:
+        yield Label("📊 Graph Insights [dim](current workspace)[/]", classes="widget-title")
+        yield Button("Refresh", id="btn-refresh-insights", variant="default")
+        yield Static("Loading insights...", id="insights-content")
+    
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn-refresh-insights":
+            self.post_message(self.RefreshRequested())
+    
+    class RefreshRequested(Message):
+        """Message when refresh is requested"""
+        pass
+
+
+class RecipesWidget(ScrollableContainer):
+    """Widget showing filter recipes - actionable, blocked, stale, etc."""
+    can_focus = True
+    
+    RECIPES = [
+        ("default", "📋 All"),
+        ("actionable", "⚡ Actionable"),
+        ("blocked", "🚫 Blocked"),
+        ("high-impact", "🎯 High Impact"),
+        ("stale", "💤 Stale"),
+    ]
+    
+    def compose(self) -> ComposeResult:
+        yield Label("🎛️ Filter Recipes [dim](current workspace)[/]", classes="widget-title")
+        with Horizontal(classes="recipe-buttons"):
+            for key, name in self.RECIPES:
+                yield Button(name, id=f"recipe-{key}", variant="default", classes="recipe-btn")
+        yield ScrollableContainer(id="recipe-results")
+    
+    class RecipeSelected(Message):
+        """Message when a recipe is selected"""
+        def __init__(self, recipe: str) -> None:
+            self.recipe = recipe
+            super().__init__()
+    
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id.startswith("recipe-"):
+            recipe = event.button.id.replace("recipe-", "")
+            self.post_message(self.RecipeSelected(recipe))
+
+
 class BeadsVillageDashboard(App):
     """Beads Village Dashboard - Monitor agents, tasks, locks, and messages"""
     
@@ -490,6 +539,49 @@ class BeadsVillageDashboard(App):
         margin-bottom: 1;
         border-left: thick $success;
     }
+    
+    /* Insights and Recipes widgets */
+    #btn-refresh-insights {
+        margin-bottom: 1;
+    }
+    
+    #insights-content {
+        height: auto;
+        max-height: 10;
+    }
+    
+    .recipe-buttons {
+        height: 3;
+        margin-bottom: 1;
+    }
+    
+    .recipe-btn {
+        min-width: 10;
+        margin: 0 1;
+    }
+    
+    #recipe-results {
+        height: 1fr;
+        min-height: 10;
+        scrollbar-gutter: stable;
+        overflow-y: auto;
+        padding-left: 1;
+    }
+    
+    .recipe-item {
+        padding: 0 1;
+        margin-bottom: 0;
+    }
+    
+    InsightsWidget {
+        height: auto;
+        max-height: 18;
+    }
+    
+    RecipesWidget {
+        height: 1fr;
+        min-height: 15;
+    }
     '''
     
     BINDINGS = [
@@ -534,6 +626,10 @@ class BeadsVillageDashboard(App):
             yield LocksWidget()
             yield Rule()
             yield MessagesWidget()
+            yield Rule()
+            yield InsightsWidget()
+            yield Rule()
+            yield RecipesWidget()
         yield Footer()
     
     def on_mount(self) -> None:
@@ -569,6 +665,8 @@ class BeadsVillageDashboard(App):
         await self.load_tasks()
         await self.load_locks()
         await self.load_messages()
+        await self.load_insights()
+        await self.load_recipes("default")
     
     def _load_all_messages(self) -> list:
         """Load all .mail messages once (for caching)"""
@@ -1003,6 +1101,155 @@ class BeadsVillageDashboard(App):
                 
         except Exception as e:
             pass
+    
+    async def load_insights(self) -> None:
+        """Load graph insights from bv (bottlenecks, keystones, cycles, pagerank)"""
+        try:
+            widget = self.query_one("#insights-content", Static)
+            
+            # Try to load bv manager
+            try:
+                from beads_village.bv_manager import BvManager
+                bv = BvManager(self.workspace)
+                
+                if not bv.is_available:
+                    widget.update("[dim]bv not installed[/]\nInstall: go install github.com/Dicklesworthstone/beads_viewer/cmd/bv@latest")
+                    return
+                
+                insights = bv.get_insights()
+                
+                if insights.get("error"):
+                    widget.update(f"[error]Error: {insights['error']}[/]")
+                    return
+                
+                content = []
+                
+                # Bottlenecks - bv returns "Bottlenecks" with capital B
+                bottlenecks = insights.get("Bottlenecks", insights.get("bottlenecks", []))
+                if bottlenecks:
+                    content.append("[b]🚧 Bottlenecks[/]")
+                    for b in bottlenecks[:3]:
+                        bid = b.get('ID', b.get('id', ''))[:15]
+                        content.append(f"  • {bid}")
+                
+                # Keystones - bv returns "Keystones" with capital K
+                keystones = insights.get("Keystones", insights.get("keystones", []))
+                if keystones:
+                    content.append("[b]🔑 Keystones[/]")
+                    for k in keystones[:3]:
+                        kid = k.get('ID', k.get('id', ''))[-8:]  # Show last 8 chars (unique part)
+                        content.append(f"  • ...{kid}")
+                
+                # Influencers (PageRank) - bv returns "Influencers"
+                influencers = insights.get("Influencers", insights.get("pagerank", []))
+                if influencers:
+                    content.append("[b]📈 Top Influencers[/]")
+                    for p in influencers[:3]:
+                        pid = p.get('ID', p.get('id', ''))[-8:]  # Show last 8 chars
+                        val = p.get('Value', p.get('score', 0))
+                        content.append(f"  • ...{pid} ({val:.3f})")
+                
+                # Cycles - bv returns "Cycles"
+                cycles = insights.get("Cycles", insights.get("cycles", []))
+                if cycles:
+                    content.append(f"[b]🔄 Cycles: {len(cycles)}[/]")
+                
+                # Stats - node count
+                stats = insights.get("Stats", {})
+                if stats:
+                    node_count = stats.get("NodeCount", 0)
+                    edge_count = stats.get("EdgeCount", 0)
+                    content.append(f"[dim]Nodes: {node_count} | Edges: {edge_count}[/]")
+                
+                if not content:
+                    content = ["[dim]No insights (graph empty)[/]"]
+                
+                widget.update("\n".join(content))
+                
+            except ImportError:
+                widget.update("[dim]bv_manager not available[/]")
+                
+        except Exception as e:
+            pass
+    
+    async def load_recipes(self, recipe: str = "default") -> None:
+        """Load issues filtered by recipe"""
+        try:
+            container = self.query_one("#recipe-results", ScrollableContainer)
+            container.remove_children()
+            
+            # Load issues
+            issues = self._load_issues_for_recipes()
+            
+            # Apply filter
+            from datetime import datetime, timedelta
+            
+            if recipe == "actionable":
+                # Open issues without blockers
+                filtered = [i for i in issues if i.get("status") == "open" and not self._has_blockers(i)]
+            elif recipe == "blocked":
+                # Blocked status OR has blockers
+                filtered = [i for i in issues if i.get("status") == "blocked" or self._has_blockers(i)]
+            elif recipe == "high-impact":
+                # High priority (0 or 1), not closed
+                filtered = [i for i in issues if i.get("priority", 2) <= 1 and i.get("status") != "closed"]
+            elif recipe == "stale":
+                # Not updated in 7+ days, not closed
+                week_ago = (datetime.now() - timedelta(days=7)).isoformat()
+                filtered = [i for i in issues if i.get("updated_at", "") < week_ago and i.get("status") != "closed"]
+            else:  # default - show ALL issues including closed (to show something)
+                filtered = issues
+            
+            if not filtered:
+                container.mount(Static("[dim]No issues match this filter[/]"))
+                return
+            
+            for issue in filtered[:15]:  # Show more items with scroll
+                pri = issue.get("priority", 2)
+                pri_icon = ["🔥", "⚡", "📌", "📋", "📝"][min(pri, 4)]
+                status = issue.get("status", "open")
+                status_icon = {"open": "○", "in_progress": "◐", "blocked": "✕", "closed": "✓"}.get(status, "○")
+                title = issue.get("title", "No title")[:35]
+                issue_id = issue.get("id", "")[-6:]  # Show last 6 chars
+                container.mount(Static(f"{pri_icon} {status_icon} ...{issue_id} {title}", classes="recipe-item"))
+                
+        except Exception as e:
+            pass
+    
+    def _load_issues_for_recipes(self) -> list:
+        """Load issues from .beads/issues.jsonl"""
+        issues = []
+        issues_file = Path(self.workspace) / '.beads' / 'issues.jsonl'
+        
+        if issues_file.exists():
+            try:
+                with open(issues_file, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            try:
+                                issues.append(json.loads(line))
+                            except json.JSONDecodeError:
+                                pass
+            except Exception:
+                pass
+        
+        return issues
+    
+    def _has_blockers(self, issue: dict) -> bool:
+        """Check if issue has blockers"""
+        for dep in issue.get("dependencies", []):
+            if dep.get("type") == "blocked_by":
+                return True
+        return False
+    
+    def on_insights_widget_refresh_requested(self, event: InsightsWidget.RefreshRequested) -> None:
+        """Handle insights refresh request"""
+        asyncio.create_task(self.load_insights())
+    
+    def on_recipes_widget_recipe_selected(self, event: RecipesWidget.RecipeSelected) -> None:
+        """Handle recipe selection"""
+        asyncio.create_task(self.load_recipes(event.recipe))
     
     def action_refresh(self) -> None:
         """Handle refresh action"""

@@ -47,6 +47,9 @@ python -m beads_village.dashboard [workspace_path]
 
 # Auto-launch when leader inits
 init(leader=true, start_tui=true)
+
+# Launch from MCP tool
+village_tui()
 ```
 
 ### Dashboard Panels
@@ -58,6 +61,22 @@ init(leader=true, start_tui=true)
 | Task Detail | Click task for full details + activity |
 | File Locks | Active reservations with TTL |
 | Messages | Recent broadcasts and done notifications |
+| Graph Insights | Keystones, Influencers, Cycles (requires bv) |
+| Filter Recipes | All, Actionable, Blocked, High Impact, Stale |
+
+---
+
+## 🔄 Tool Consolidation (v1.3.0)
+
+The following tools have been consolidated to reduce the total from 26 to 21:
+
+| Old Tool | New Usage | Description |
+|----------|-----------|-------------|
+| `broadcast` | `msg(subj, body, global=true, to="all")` | Team-wide announcement |
+| `discover` | `status(include_agents=true)` | Find teammates |
+| `ready` | `ls(status="ready")` | Get claimable tasks |
+| `bv_status` | `status(include_bv=true)` | Check bv availability |
+| `bv_tui` | `village_tui` | Unified dashboard |
 
 ---
 
@@ -70,7 +89,7 @@ Q: Am I starting work?
 │   ├─ Am I the leader/coordinator? → init(leader=true, start_tui=true)
 │   ├─ Do I have a specialty? → init(role="fe/be/mobile/devops/qa")
 │   └─ General agent → init()
-└─ Already called init() → proceed to claim() or ready()
+└─ Already called init() → proceed to claim() or ls(status="ready")
 ```
 
 ### Getting Work
@@ -78,7 +97,7 @@ Q: Am I starting work?
 Q: What task should I work on?
 ├─ Worker with role → claim() (auto-filters by your role)
 ├─ Want next priority task → claim()
-├─ Want to see options first → ready(limit=5)
+├─ Want to see options first → ls(status="ready", limit=5)
 ├─ Looking for specific task → ls(status="open") or show(id="...")
 └─ No tasks available → add(title="...", desc="...")
 ```
@@ -105,9 +124,9 @@ Q: Am I about to edit files?
 ```
 Q: Who needs this message?
 ├─ Agents in THIS workspace only → msg(subj="...", to="all")
-├─ ALL agents in my TEAM (across workspaces) → broadcast(subj="...", body="...")
+├─ ALL agents in my TEAM (across workspaces) → msg(subj="...", body="...", global=true, to="all")
 ├─ Specific agent in team → msg(subj="...", to="agent-id", global=true)
-└─ Find who's available → discover()
+└─ Find who's available → status(include_agents=true)
 ```
 
 ### Completing Work
@@ -172,13 +191,17 @@ release()  # free the files
 claim()
 ```
 
-### ❌ Mistake 5: Using msg() instead of broadcast() for team-wide announcements
+### ❌ Mistake 5: Using old tools that have been consolidated
 ```
-# WRONG - only reaches local workspace
-msg(subj="API ready")
+# OLD - these tools no longer exist
+broadcast(subj="API ready")
+discover()
+ready()
 
-# CORRECT - reaches ALL agents across ALL workspaces in team
-broadcast(subj="API ready", body="POST /auth/login is live")
+# NEW - use consolidated tools
+msg(subj="API ready", body="POST /auth/login is live", global=true, to="all")
+status(include_agents=true)
+ls(status="ready")
 ```
 
 ### ❌ Mistake 6: Forgetting to sync
@@ -223,7 +246,7 @@ done(id="bd-42", msg="Implemented login with JWT tokens")
 ### Pattern 2: Leader-Worker Role-Based Assignment
 ```python
 # === LEADER AGENT (orchestrator/coordinator) ===
-init(team="ecommerce", leader=true)
+init(team="ecommerce", leader=true, start_tui=true)
 # Returns: {"ok":1, "agent":"agent-001", "ws":"...", "team":"ecommerce", "leader":true}
 
 # Create tasks with role tags
@@ -269,7 +292,7 @@ claim()  # Auto-filtered to tasks tagged "be"
 reserve(paths=["src/auth/login.py"], reason="bd-10")
 [implement endpoint]
 done(id="bd-10", msg="Login API ready with JWT auth")
-broadcast(subj="Auth API Ready", body="POST /auth/login - returns JWT in 'token' field")
+msg(subj="Auth API Ready", body="POST /auth/login - returns JWT in 'token' field", global=true, to="all")
 
 
 # === FE WORKER AGENT ===
@@ -317,14 +340,14 @@ init()
 claim()  # Gets "Implement /auth/login endpoint"
 [implement API]
 done(id="bd-10", msg="Login API ready")
-broadcast(subj="Auth API Ready", body="POST /auth/login - returns JWT token in 'token' field")
+msg(subj="Auth API Ready", body="POST /auth/login - returns JWT token in 'token' field", global=true, to="all")
 
 # === FE Agent in /web workspace ===
 init()
 inbox()  # Sees broadcast from BE agent
 # [{"f":"agent-be", "s":"Auth API Ready", "ws":"/api", "global":true}]
 
-discover()  # See who's working
+status(include_agents=true)  # See who's working (replaces discover)
 # {"agents":[{"agent":"agent-be","ws":"/api"}, {"agent":"agent-fe","ws":"/web"}]}
 
 # Can switch to BE workspace to see their task details
@@ -388,8 +411,7 @@ claim()
 |------|-------------|----------|---------|
 | `add` | Create new issue | `title`, `desc`, `typ`, `pri`, `tags` | `{id, t, p, typ, tags}` |
 | `assign` | Assign task to role (leader only) | `id`, `role` | `{ok, id, role}` |
-| `ls` | List issues | `status`, `limit` | `[{id, t, p, s, tags}...]` |
-| `ready` | See claimable tasks | `limit` | `[{id, t, p, tags}...]` |
+| `ls` | List issues | `status` (open/closed/ready/all), `limit` | `[{id, t, p, s, tags}...]` |
 | `show` | Get issue details | `id` | Full issue object |
 
 ### File Locking
@@ -402,15 +424,24 @@ claim()
 ### Messaging
 | Tool | When to Use | Key Args | Returns |
 |------|-------------|----------|---------|
-| `msg` | Direct message | `subj`, `body`, `to`, `global` | `{sent}` |
-| `broadcast` | Team announcement | `subj`, `body` | `{sent, global:true}` |
+| `msg` | Send message or broadcast | `subj`, `body`, `to`, `global` | `{sent}` |
 | `inbox` | Check messages | `n`, `unread`, `global` | `[{f, s, b, ts}...]` |
 
-### Discovery & Status
+**Broadcasting (replaces old `broadcast` tool):**
+```python
+msg(subj="API Ready", body="Login endpoint live", global=true, to="all")
+```
+
+### Status & Discovery
 | Tool | When to Use | Key Args | Returns |
 |------|-------------|----------|---------|
-| `discover` | Find teammates | - | `{agents, workspaces}` |
-| `status` | Workspace overview | - | `{team, agents, issues...}` |
+| `status` | Workspace overview | `include_agents`, `include_bv` | `{team, agents, issues...}` |
+
+**Finding teammates (replaces old `discover` tool):**
+```python
+status(include_agents=true)
+# Returns: {"agents":[{"agent":"agent-be","ws":"/api","role":"be"}, ...]}
+```
 
 ### Maintenance
 | Tool | When to Use | Key Args | Returns |
@@ -418,6 +449,15 @@ claim()
 | `sync` | Force git sync | - | `{ok}` |
 | `cleanup` | Remove old closed issues | `days` | `{deleted}` |
 | `doctor` | Fix database issues | - | Health report |
+
+### Dashboard & Graph Tools
+| Tool | When to Use | Returns |
+|------|-------------|---------|
+| `village_tui` | Launch unified dashboard | `{ok, message}` |
+| `bv_insights` | Graph analysis (requires bv) | Bottlenecks, keystones, cycles |
+| `bv_plan` | Parallel execution tracks | Issue tracks |
+| `bv_priority` | Priority recommendations | Ranked issues |
+| `bv_diff` | Compare git revisions | Issue changes |
 
 ---
 
@@ -438,8 +478,14 @@ Get priority recommendations ranked by impact score.
 ### bv_plan()
 Get parallel execution tracks for multi-agent coordination.
 
-### bv_tui()
-Launch TUI dashboard for human monitoring.
+### village_tui()
+Launch unified TUI dashboard for human monitoring. Works without bv, but graph insights require bv.
+
+**Check bv availability:**
+```python
+status(include_bv=true)
+# Returns: {"bv_available": true, "bv_version": "1.0.0", ...}
+```
 
 ---
 
@@ -486,7 +532,7 @@ Leaders orchestrate work by creating and assigning tasks:
 
 ```python
 # Initialize as leader
-init(team="my-project", leader=true)
+init(team="my-project", leader=true, start_tui=true)
 # Returns: {"ok":1, "agent":"agent-001", "leader":true, ...}
 
 # Create tasks with role tags
@@ -512,8 +558,8 @@ init(team="my-project", role="fe")
 claim()  # Only returns tasks tagged "fe"
 # Returns: {"id":"bd-11", "t":"User profile page", "tags":["fe"], ...}
 
-# ready() also respects role
-ready()  # Shows only "fe" tasks available
+# ls(status="ready") also respects role
+ls(status="ready")  # Shows only "fe" tasks available
 ```
 
 ### Task Tags
@@ -554,8 +600,8 @@ add(title="Update README", desc="General task")
 ### What is a Team?
 
 A **team** groups related agents (BE, FE, Mobile, etc.) working on the same project. Agents in the same team can:
-- See each other via `discover()`
-- Send broadcasts via `broadcast()`
+- See each other via `status(include_agents=true)`
+- Send broadcasts via `msg(global=true, to="all")`
 - Receive team messages via `inbox()`
 
 Agents in **different teams** are completely isolated - they cannot see or message each other.
@@ -570,24 +616,24 @@ init(team="my-project")
 # Returns: {"ok":1, "agent":"agent-001", "ws":"...", "team":"my-project", "available_teams":["default","my-project"]}
 
 # Now agent is in team "my-project"
-discover()  # See other agents in this team
-broadcast(subj="Hello", body="I joined!")  # Send to all team members
+status(include_agents=true)  # See other agents in this team
+msg(subj="Hello", body="I joined!", global=true, to="all")  # Send to all team members
 ```
 
-### Xem Available Teams
+### See Available Teams
 
 ```python
 init()
 # Response includes: "available_teams": ["abc", "default", "ecommerce"]
 
-# Hoặc check status
+# Or check status
 status()
 # Returns: {"team":"current-team", ...}
 ```
 
-### Join Team Cụ Thể
+### Join Specific Team
 
-**Scenario**: User bảo "join team abc"
+**Scenario**: User says "join team abc"
 
 ```python
 init(team="abc")
@@ -595,38 +641,38 @@ init(team="abc")
 #   "ok": 1,
 #   "agent": "agent-003",
 #   "ws": "C:\\Projects\\mobile",
-#   "team": "abc",                    # ✓ Đã join team abc
+#   "team": "abc",                    # ✓ Joined team abc
 #   "available_teams": ["abc", "default", "xyz"]
 # }
 
-# Verify - thấy được các agents khác trong team abc
-discover()
+# Verify - can see other agents in team abc
+status(include_agents=true)
 # Returns: {"team":"abc", "agents":[
 #   {"agent":"agent-001", "ws":"C:\\Projects\\api"},
 #   {"agent":"agent-002", "ws":"C:\\Projects\\web"},
-#   {"agent":"agent-003", "ws":"C:\\Projects\\mobile"}  # Bạn
+#   {"agent":"agent-003", "ws":"C:\\Projects\\mobile"}  # You
 # ]}
 ```
 
 ### Switching Between Teams
 
-Agent có thể làm việc với nhiều team trong cùng session:
+Agent can work with multiple teams in the same session:
 
 ```python
-# Đang ở team alpha, cần check team beta
+# Currently in team alpha, need to check team beta
 init(team="beta")
-inbox()  # Xem messages từ team beta
-discover()  # Xem agents trong team beta
+inbox()  # See messages from team beta
+status(include_agents=true)  # See agents in team beta
 
-# Quay lại team alpha
+# Return to team alpha
 init(team="alpha")
-broadcast(subj="Done", body="Finished checking beta")
+msg(subj="Done", body="Finished checking beta", global=true, to="all")
 ```
 
-**Lưu ý**: Khi switch team, agent sẽ:
-- Tự động re-register vào team mới
-- Gửi join announcement cho team mới
-- `broadcast()`, `inbox()`, `discover()` sẽ scope theo team mới
+**Note**: When switching teams, the agent will:
+- Auto-register in the new team
+- Send join announcement to the new team
+- `msg(global=true)`, `inbox()`, `status(include_agents=true)` will scope to the new team
 
 ### Example: Setting Up a 3-Agent Team
 
@@ -644,21 +690,21 @@ init(team="ecommerce")
 # → joins existing team "ecommerce"
 
 # All 3 agents can now:
-discover()   # See each other
-broadcast()  # Send to all
-inbox()      # Receive team messages
+status(include_agents=true)   # See each other
+msg(global=true, to="all")    # Send to all
+inbox()                        # Receive team messages
 ```
 
 ### Default Team
 
-Nếu không chỉ định team, agent sẽ join team `default`:
+If no team is specified, agent joins team `default`:
 
 ```python
-init()  # Không có team parameter
+init()  # No team parameter
 # Returns: {"ok":1, ..., "team":"default"}
 ```
 
-⚠️ **Warning**: Tất cả agents không chỉ định team đều vào `default` - có thể thấy broadcasts của nhau dù làm việc trên projects khác nhau!
+⚠️ **Warning**: All agents without specified team go to `default` - may see each other's broadcasts even if working on different projects!
 
 ### Team Isolation Architecture
 
@@ -712,7 +758,7 @@ init(team="app-team-b")     # Agent in /app-b (isolated from core)
 #### Pattern 4: Role-Based Team with Leader
 ```python
 # Leader sets up the team and creates tasks
-init(team="ecommerce", leader=true)
+init(team="ecommerce", leader=true, start_tui=true)
 add(title="Payment API", tags=["be"])
 add(title="Checkout UI", tags=["fe"])
 add(title="Payment flow tests", tags=["qa"])
@@ -734,7 +780,7 @@ init(team="ecommerce", role="qa")   # QA agent
 | Error | Cause | Solution |
 |-------|-------|----------|
 | `workspace not found` | Invalid path in init() | Check path exists |
-| `bd CLI not found` | Beads not installed | `go install github.com/steveyegge/beads/cmd/bd@latest` |
+| `bd CLI not found` | Beads not installed | `pip install beads` |
 | `no ready tasks` | No claimable work | Use `add()` to create tasks or `ls()` to see all |
 | `file reserved by agent-X` | Conflict | Wait, message agent, or work on different files |
 | `timeout` | Slow git operation | Run `sync()` manually, check network |
@@ -761,7 +807,7 @@ inbox(unread=True)
 ### Before Starting
 - [ ] Call `init()` first (with `role` or `leader` as appropriate)
 - [ ] Check `inbox()` for updates from other agents
-- [ ] Run `ready()` to see available tasks (filtered by your role if set)
+- [ ] Run `ls(status="ready")` to see available tasks (filtered by your role if set)
 
 ### During Work
 - [ ] Always `reserve()` before editing files
@@ -771,7 +817,7 @@ inbox(unread=True)
 
 ### When Completing
 - [ ] Use descriptive `msg` in `done()` - explain what was done
-- [ ] `broadcast()` important completions to team
+- [ ] `msg(global=true, to="all")` for important completions to team
 - [ ] Restart session after `done()` for clean state
 
 ### Maintenance (Every Few Days)
@@ -845,7 +891,7 @@ Agent: Login form complete. Marking done and announcing to team.
 done(id="bd-50", msg="Login form implemented using auth API. Filed bd-51 for validation.")
 # {"ok":1, "done":1, "hint":"restart session for best performance"}
 
-broadcast(subj="Login Form Ready", body="FE login at /login - uses POST /auth/login")
+msg(subj="Login Form Ready", body="FE login at /login - uses POST /auth/login", global=true, to="all")
 # {"sent":1, "global":true}
 
 Agent: Task complete. Restarting session as recommended.
@@ -864,7 +910,7 @@ inbox(unread=True)
 
 Agent: Backend API is ready. Let me see what FE tasks are available.
 
-ready()
+ls(status="ready")
 # [{"id":"bd-20", "t":"User profile page", "p":1, "tags":["fe"]},
 #  {"id":"bd-21", "t":"User settings form", "p":2, "tags":["fe"]}]
 
@@ -885,7 +931,7 @@ done(id="bd-20", msg="Profile page complete with user API integration")
 # === Leader setting up sprint work ===
 Agent: I'm the team lead. Let me create and assign tasks for the sprint.
 
-init(team="ecommerce", leader=true)
+init(team="ecommerce", leader=true, start_tui=true)
 # {"ok":1, "agent":"agent-lead", "ws":"C:\\project", "team":"ecommerce", "leader":true}
 
 Agent: Creating tasks for the checkout feature.
@@ -919,13 +965,13 @@ add(
 
 Agent: Tasks created. Workers will automatically receive tasks matching their roles.
 
-discover()
+status(include_agents=true)
 # {"team":"ecommerce", "agents":[
 #   {"agent":"agent-be", "ws":"/api", "role":"be"},
 #   {"agent":"agent-fe", "ws":"/web", "role":"fe"},
 #   {"agent":"agent-qa", "ws":"/tests", "role":"qa"}
 # ]}
 
-broadcast(subj="Sprint Started", body="Checkout feature tasks created. Claim your work!")
+msg(subj="Sprint Started", body="Checkout feature tasks created. Claim your work!", global=true, to="all")
 # {"sent":1, "global":true}
 ```

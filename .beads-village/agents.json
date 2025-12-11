@@ -38,5 +38,15 @@
     "current_task": "mcp-beads-village-test",
     "last_seen": 1765288988.812853,
     "started_at": 1765288988.812853
+  },
+  "agent-31252": {
+    "agent_id": "agent-31252",
+    "team": "default",
+    "role": null,
+    "workspace": "c:\\Working\\mcp-beads-village",
+    "is_leader": false,
+    "current_task": null,
+    "last_seen": 1765461865.2166793,
+    "started_at": 1765461865.2166793
   }
 }

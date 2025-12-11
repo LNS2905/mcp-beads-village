@@ -234,7 +234,7 @@ async def _bd_via_daemon(daemon: BdDaemonClient, args: tuple) -> dict:
         priority = 2
         description = ""
         deps = []
-        tags = []
+        has_labels = False
         
         i = 2
         while i < len(args):
@@ -254,17 +254,18 @@ async def _bd_via_daemon(daemon: BdDaemonClient, args: tuple) -> dict:
             elif arg == "--deps" and i + 1 < len(args):
                 deps.append(args[i + 1])
                 i += 2
-            elif arg == "--tag" and i + 1 < len(args):
-                tags.append(args[i + 1])
+            elif arg in ("--labels", "-l") and i + 1 < len(args):
+                # --labels is comma-separated for create command
+                has_labels = True
                 i += 2
             elif arg == "--json":
                 i += 1  # Skip
             else:
                 i += 1
         
-        # If tags are used, fall back to CLI (daemon may not support tags yet)
-        if tags:
-            raise DaemonNotRunningError("Tags not supported by daemon, falling back to CLI")
+        # If labels are used, fall back to CLI (daemon may not support labels yet)
+        if has_labels:
+            raise DaemonNotRunningError("Labels not supported by daemon, falling back to CLI")
         
         return await daemon.create(
             title=title,
@@ -278,7 +279,7 @@ async def _bd_via_daemon(daemon: BdDaemonClient, args: tuple) -> dict:
         issue_id = args[1]
         status = None
         priority = None
-        tags = []
+        has_labels = False
         
         for i, arg in enumerate(args):
             if arg == "--status" and i + 1 < len(args):
@@ -288,12 +289,13 @@ async def _bd_via_daemon(daemon: BdDaemonClient, args: tuple) -> dict:
                     priority = int(args[i + 1])
                 except ValueError:
                     pass
-            elif arg == "--tag" and i + 1 < len(args):
-                tags.append(args[i + 1])
+            elif arg in ("--add-label", "--remove-label", "--set-labels"):
+                # Any label-related flag means we need CLI fallback
+                has_labels = True
         
-        # If tags are used, fall back to CLI (daemon may not support tags yet)
-        if tags:
-            raise DaemonNotRunningError("Tags not supported by daemon, falling back to CLI")
+        # If labels are used, fall back to CLI (daemon may not support labels yet)
+        if has_labels:
+            raise DaemonNotRunningError("Labels not supported by daemon, falling back to CLI")
         
         return await daemon.update(issue_id, status=status, priority=priority)
     
@@ -1028,9 +1030,9 @@ async def tool_add(args: dict) -> str:
     if description:
         cmd_args.extend(["--description", description])
     
-    # Add tags if provided
-    for tag in tags:
-        cmd_args.extend(["--tag", tag])
+    # Add tags as labels (bd CLI uses --labels/-l, not --tag)
+    if tags:
+        cmd_args.extend(["--labels", ",".join(tags)])
     
     # Add dependencies if provided (format: "discovered-from:bd-123" or just "bd-123")
     if deps:
@@ -1114,10 +1116,10 @@ async def tool_assign(args: dict) -> str:
             "hint": f"Issue '{issue_id}' not found. Use 'ls' to see available issues."
         })
     
-    # Add tag to issue (beads CLI should support --tag)
-    r = await bd("update", issue_id, "--tag", role)
+    # Add label to issue (bd CLI uses --add-label, not --tag)
+    r = await bd("update", issue_id, "--add-label", role)
     if isinstance(r, dict) and r.get("error"):
-        # Fallback: try alternative approach if update --tag not supported
+        # Fallback: try alternative approach if update --add-label not supported
         # We can store assignment in description or use a workaround
         pass
     
@@ -1140,11 +1142,55 @@ async def tool_assign(args: dict) -> str:
 
 
 async def tool_ls(args: dict) -> str:
-    """List issues with pagination."""
+    """List issues with pagination.
+    
+    Consolidated tool that supports:
+    - status: open|closed|in_progress|ready|all
+    - status='ready' returns issues with no blockers (replaces separate 'ready' tool)
+    """
     status = args.get("status", "open")
     limit = min(args.get("limit", 10), 50)  # Cap at 50
     offset = args.get("offset", 0)
 
+    # Handle 'ready' status specially - uses bd ready command
+    if status == "ready":
+        r = await bd("ready")
+        
+        if isinstance(r, dict) and r.get("error"):
+            return j({
+                "error": r["error"],
+                "hint": "Try running 'sync' to fetch latest state, or 'doctor' to fix issues"
+            })
+        
+        if not isinstance(r, list):
+            return j({
+                "items": [],
+                "total": 0,
+                "count": 0,
+                "offset": offset,
+                "has_more": False
+            })
+        
+        total = len(r)
+        paginated = r[offset:offset + limit]
+        
+        items = [{
+            "id": i.get("id", ""),
+            "t": i.get("title", ""),
+            "p": i.get("priority", 2),
+            "s": "ready"  # Mark as ready
+        } for i in paginated]
+        
+        return j({
+            "items": items,
+            "total": total,
+            "count": len(items),
+            "offset": offset,
+            "has_more": offset + limit < total,
+            "next_offset": offset + limit if offset + limit < total else None
+        })
+
+    # Normal status filtering
     r = await bd("list", "--status", status)
 
     if isinstance(r, dict) and r.get("error"):
@@ -1179,43 +1225,6 @@ async def tool_ls(args: dict) -> str:
         "offset": offset,
         "has_more": offset + limit < total,
         "next_offset": offset + limit if offset + limit < total else None
-    })
-
-
-async def tool_ready(args: dict) -> str:
-    """Get ready issues (no blockers) with pagination."""
-    limit = min(args.get("limit", 5), 20)  # Cap at 20
-
-    r = await bd("ready")
-
-    if isinstance(r, dict) and r.get("error"):
-        return j({
-            "error": r["error"],
-            "hint": "Try running 'sync' to fetch latest state, or 'doctor' to fix issues"
-        })
-
-    if not isinstance(r, list):
-        return j({
-            "items": [],
-            "total": 0,
-            "count": 0,
-            "has_more": False
-        })
-
-    total = len(r)
-    paginated = r[:limit]
-
-    items = [{
-        "id": i.get("id", ""),
-        "t": i.get("title", ""),
-        "p": i.get("priority", 2)
-    } for i in paginated]
-
-    return j({
-        "items": items,
-        "total": total,
-        "count": len(items),
-        "has_more": limit < total
     })
 
 
@@ -1423,52 +1432,19 @@ async def tool_inbox(args: dict) -> str:
     return j(items)
 
 
-async def tool_broadcast(args: dict) -> str:
-    """Broadcast message to ALL agents across ALL workspaces.
+async def tool_status(args: dict) -> str:
+    """Get village status overview.
     
-    Use this for important announcements that all agents need to see,
-    regardless of which workspace they're in.
+    Consolidated tool that includes:
+    - Basic workspace status (always)
+    - Agent/team discovery (include_agents=true)
+    - bv tool availability (include_bv=true)
+    
+    Replaces: discover, bv_status (now merged here)
     """
-    subj = args.get("subj", "")
-    if not subj:
-        return j({"error": "subj required"})
+    include_agents = args.get("include_agents", False)
+    include_bv = args.get("include_bv", False)
     
-    body = args.get("body", "")
-    importance = args.get("importance", "high")  # Default high for broadcasts
-    
-    result = await send_msg(subj, body, "all", S.issue or "", importance, global_broadcast=True)
-    
-    return j({"ok": 1, "broadcast": True, "hint": "Message sent to all agents in team"})
-
-
-async def tool_discover(_args: dict) -> str:
-    """Discover all active agents and workspaces in the same team.
-    
-    Returns list of active agents with their workspaces, useful for
-    cross-workspace coordination within your team/project.
-    """
-    # Update our heartbeat
-    update_agent_heartbeat()
-    
-    agents = get_active_agents()
-    workspaces = discover_workspaces()
-    
-    return j({
-        "team": TEAM,
-        "agents": [{
-            "agent": a.get("agent", ""),
-            "ws": a.get("ws", ""),
-            "capabilities": a.get("capabilities", []),
-            "last_seen": a.get("last_seen", ""),
-        } for a in agents],
-        "workspaces": workspaces,
-        "total_agents": len(agents),
-        "total_workspaces": len(workspaces),
-    })
-
-
-async def tool_status(_args: dict) -> str:
-    """Get village status overview including cross-workspace agents."""
     # Update our heartbeat
     update_agent_heartbeat()
     
@@ -1479,14 +1455,10 @@ async def tool_status(_args: dict) -> str:
     # Get active reservations (local workspace)
     reservations = get_active_reservations()
     
-    # Get agents across ALL workspaces
-    all_agents = get_active_agents()
-    workspaces = discover_workspaces()
-    
     # Session duration
     mins = (datetime.now() - S.start).total_seconds() / 60
     
-    return j({
+    result = {
         "agent": AGENT,
         "ws": WS,
         "team": TEAM,
@@ -1495,11 +1467,46 @@ async def tool_status(_args: dict) -> str:
         "current": S.issue,
         "reserved": len(S.reserved_files),
         "local_agents": len(set(r.get("agent", "") for r in reservations)),
-        "team_agents": len(all_agents),
-        "workspaces": len(workspaces),
         "min": round(mins, 1),
         "done": S.done
-    })
+    }
+    
+    # Include agent/team discovery info (replaces discover tool)
+    if include_agents:
+        all_agents = get_active_agents()
+        workspaces = discover_workspaces()
+        result["agents"] = [{
+            "agent": a.get("agent", ""),
+            "ws": a.get("ws", ""),
+            "capabilities": a.get("capabilities", []),
+            "last_seen": a.get("last_seen", ""),
+        } for a in all_agents]
+        result["workspaces"] = workspaces
+        result["team_agents"] = len(all_agents)
+        result["total_workspaces"] = len(workspaces)
+    else:
+        # Just include counts for quick overview
+        all_agents = get_active_agents()
+        workspaces = discover_workspaces()
+        result["team_agents"] = len(all_agents)
+        result["workspaces"] = len(workspaces)
+    
+    # Include bv tool status (replaces bv_status tool)
+    if include_bv:
+        bv = _get_bv()
+        if bv.is_available:
+            result["bv"] = {
+                "available": True,
+                "version": bv.get_version(),
+                "path": bv.get_bv_path()
+            }
+        else:
+            result["bv"] = {
+                "available": False,
+                "hint": "Install bv: go install github.com/Dicklesworthstone/beads_viewer/cmd/bv@latest"
+            }
+    
+    return j(result)
 
 
 # ============================================================================
@@ -1578,24 +1585,14 @@ TOOLS = {
     # Issue queries
     "ls": {
         "fn": tool_ls,
-        "desc": "List issues. Returns id,t,p,s per issue.",
+        "desc": "List issues. Use status='ready' for claimable tasks (no blockers).",
         "input": {
             "type": "object",
             "properties": {
-                "status": {"type": "string", "description": "open|closed|in_progress|all"},
+                "status": {"type": "string", "description": "open|closed|in_progress|ready|all"},
                 "limit": {"type": "integer", "description": "Max results (default:10)"},
                 "offset": {"type": "integer", "description": "Skip N issues"}
             },
-            "required": []
-        },
-        "annotations": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True}
-    },
-    "ready": {
-        "fn": tool_ready,
-        "desc": "Get claimable tasks (no blockers). Sorted by priority.",
-        "input": {
-            "type": "object",
-            "properties": {"limit": {"type": "integer", "description": "Max results (default:5)"}},
             "required": []
         },
         "annotations": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True}
@@ -1667,7 +1664,7 @@ TOOLS = {
     # Messaging
     "msg": {
         "fn": tool_msg,
-        "desc": "Send message. Set global=true for cross-workspace.",
+        "desc": "Send message. Use global=true + to='all' for team-wide broadcast.",
         "input": {
             "type": "object",
             "properties": {
@@ -1696,31 +1693,18 @@ TOOLS = {
         },
         "annotations": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False}
     },
-    "broadcast": {
-        "fn": tool_broadcast,
-        "desc": "Message all agents in team across workspaces.",
+    # Status (consolidated: replaces discover, bv_status)
+    "status": {
+        "fn": tool_status,
+        "desc": "Workspace overview. Use include_agents=true for team discovery, include_bv=true for bv status.",
         "input": {
             "type": "object",
             "properties": {
-                "subj": {"type": "string", "description": "Subject"},
-                "body": {"type": "string", "description": "Message body"},
-                "importance": {"type": "string", "description": "low|normal|high"}
+                "include_agents": {"type": "boolean", "description": "Include detailed agent/workspace info (replaces discover)"},
+                "include_bv": {"type": "boolean", "description": "Include bv tool availability (replaces bv_status)"}
             },
-            "required": ["subj"]
+            "required": []
         },
-        "annotations": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": True}
-    },
-    "discover": {
-        "fn": tool_discover,
-        "desc": "Find active agents in team.",
-        "input": {"type": "object", "properties": {}, "required": []},
-        "annotations": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True}
-    },
-    # Status
-    "status": {
-        "fn": tool_status,
-        "desc": "Workspace overview: issues, task, agents, reservations.",
-        "input": {"type": "object", "properties": {}, "required": []},
         "annotations": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True}
     },
 }
@@ -1744,7 +1728,7 @@ async def handle_request(req: dict) -> Optional[dict]:
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {}},
                 "serverInfo": {"name": "beads-village", "version": "2.0"},
-                "instructions": """Beads Village MCP - Multi-agent task coordination.
+                "instructions": """Beads Village MCP - Multi-agent task coordination (21 tools).
 
 WORKFLOW: init() → claim() → reserve() → work → done() → restart session
 
@@ -1752,7 +1736,9 @@ RULES: init first | reserve before edit | add issues for >2min work
 
 RESPONSE: id=ID, t=title, p=pri(0-4), s=status, f=from, b=body
 
-TEAMS: init(team="x") to join | broadcast() for team-wide msgs"""
+TEAMS: init(team="x") to join | msg(global=true,to="all") for broadcast
+
+CONSOLIDATED: broadcast→msg(global=true) | discover→status(include_agents=true) | ready→ls(status="ready")"""
             }
         }
     
@@ -2020,24 +2006,8 @@ TOOLS.update({
         },
         "annotations": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True}
     },
-    "bv_tui": {
-        "fn": tool_bv_tui,
-        "desc": "Launch Beads Viewer TUI dashboard in new terminal.",
-        "input": {
-            "type": "object",
-            "properties": {
-                "recipe": {"type": "string", "description": "Filter preset (default, actionable, recent, blocked, high-impact, stale)"}
-            },
-            "required": []
-        },
-        "annotations": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": True}
-    },
-    "bv_status": {
-        "fn": tool_bv_status,
-        "desc": "Check bv availability and version.",
-        "input": {"type": "object", "properties": {}, "required": []},
-        "annotations": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True}
-    },
+    # NOTE: bv_tui removed - use village_tui instead (unified dashboard with all features)
+    # NOTE: bv_status removed - use status(include_bv=true) instead
 })
 
 
@@ -2056,49 +2026,76 @@ async def tool_village_tui(args: dict) -> str:
     """
     import subprocess
     import sys
+    import shutil
     
-    cmd = [sys.executable, '-m', 'beads_village.dashboard', WS]
+    python_exe = sys.executable
+    workspace = WS
+    
+    # Check if textual is installed
+    try:
+        import textual
+    except ImportError:
+        return j({
+            'error': 'textual not installed',
+            'hint': 'Install with: pip install textual'
+        })
     
     try:
         if sys.platform == 'win32':
-            # Windows: start in new cmd window
-            subprocess.Popen(
-                f'start cmd /k {" ".join(cmd)}',
-                shell=True,
-                cwd=WS
-            )
+            # Windows: use cmd /c with command and pause
+            cmd = f'start "Beads Village Dashboard" cmd /c ""{python_exe}" -m beads_village.dashboard "{workspace}" & pause"'
+            subprocess.Popen(cmd, shell=True, cwd=workspace)
         elif sys.platform == 'darwin':
             # macOS: use osascript to open Terminal
-            script = f'cd "{WS}" && {" ".join(cmd)}'
+            # Escape quotes properly for AppleScript
+            escaped_ws = workspace.replace('"', '\\"')
+            escaped_py = python_exe.replace('"', '\\"')
+            script = f'cd "{escaped_ws}" && "{escaped_py}" -m beads_village.dashboard "{escaped_ws}"'
             subprocess.Popen([
                 'osascript', '-e',
                 f'tell application "Terminal" to do script "{script}"'
             ])
         else:
             # Linux: try common terminal emulators
-            import shutil
-            terminals = ['gnome-terminal', 'xterm', 'konsole', 'xfce4-terminal']
+            terminals = ['gnome-terminal', 'xterm', 'konsole', 'xfce4-terminal', 'alacritty', 'kitty']
+            launched = False
             for term in terminals:
                 if shutil.which(term):
                     if term == 'gnome-terminal':
                         subprocess.Popen(
-                            [term, '--', 'bash', '-c', f'cd "{WS}" && {" ".join(cmd)}; read'],
+                            [term, '--', python_exe, '-m', 'beads_village.dashboard', workspace],
+                            start_new_session=True
+                        )
+                    elif term in ('alacritty', 'kitty'):
+                        subprocess.Popen(
+                            [term, '-e', python_exe, '-m', 'beads_village.dashboard', workspace],
+                            start_new_session=True
+                        )
+                    elif term == 'konsole':
+                        subprocess.Popen(
+                            [term, '-e', python_exe, '-m', 'beads_village.dashboard', workspace],
                             start_new_session=True
                         )
                     else:
+                        # xterm, xfce4-terminal
                         subprocess.Popen(
-                            [term, '-e', ' '.join(cmd)],
-                            cwd=WS,
+                            [term, '-e', f'{python_exe} -m beads_village.dashboard "{workspace}"'],
+                            cwd=workspace,
                             start_new_session=True
                         )
+                    launched = True
                     break
-            else:
-                return j({'error': 'No terminal emulator found'})
+            
+            if not launched:
+                return j({
+                    'error': 'No terminal emulator found',
+                    'hint': 'Install gnome-terminal, xterm, konsole, xfce4-terminal, alacritty, or kitty'
+                })
         
-        return j({'ok': 1, 'message': 'Village Dashboard launched'})
+        return j({'ok': 1, 'message': 'Village Dashboard launched in new terminal'})
         
     except Exception as e:
-        return j({'error': str(e)})
+        return j({'error': str(e), 'hint': 'Failed to launch dashboard'})
 
 
 # Add village_tui to TOOLS registry

@@ -49,10 +49,19 @@ if (!pythonCmd) {
     process.exit(1);
 }
 
+// Add package root to PYTHONPATH so Python can find beads_village module
+const packageRoot = path.join(__dirname, '..');
+const existingPythonPath = process.env.PYTHONPATH || '';
+const pathSeparator = process.platform === 'win32' ? ';' : ':';
+const newPythonPath = existingPythonPath 
+    ? `${packageRoot}${pathSeparator}${existingPythonPath}`
+    : packageRoot;
+
 const server = spawn(pythonCmd, [serverPath], {
     stdio: ['pipe', 'pipe', 'inherit'],
     env: {
         ...process.env,
+        PYTHONPATH: newPythonPath,
         PYTHONUNBUFFERED: '1',
         PYTHONIOENCODING: 'utf-8'
     },
