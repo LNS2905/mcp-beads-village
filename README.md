@@ -380,6 +380,15 @@ npx beads-village --help
 ## Changelog
 
 <details>
+<summary><strong>v1.3.2</strong> - Dashboard Launch Fix (Windows)</summary>
+
+**Bug Fixes:**
+- Fixed `village_tui` tool not launching dashboard correctly on Windows
+- Improved command escaping for paths with spaces
+
+</details>
+
+<details>
 <summary><strong>v1.3.1</strong> - CLI Flag Fix</summary>
 
 **Bug Fixes:**
